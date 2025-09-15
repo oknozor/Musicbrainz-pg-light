@@ -3,19 +3,16 @@ use std::{
     io::Read,
 };
 
+use crate::settings::Settings;
 use anyhow::Result;
 use bytes::Bytes;
 use bzip2::bufread::BzDecoder;
 use futures_util::{SinkExt, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
-use musicbrainz_light_config::Settings;
 use tar::Archive;
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
 use tokio_postgres::NoTls;
-
-pub mod github_sync;
-pub mod init;
 
 const MB_DUMP: &str = "mbdump.tar.bz2";
 const MB_DUMP_DERIVED: &str = "mbdump-derived.tar.bz2";
@@ -26,9 +23,9 @@ const MB_DUMP_STATS: &str = "mbdump-stats.tar.bz2";
 const MUSICBRAINZ_FTP: &str = "http://ftp.musicbrainz.org/pub/musicbrainz/data/fullexport";
 
 pub struct MusicBrainzLightDownloadClient {
-    client: reqwest::Client,
-    config: Settings,
-    db: tokio_postgres::Client,
+    pub client: reqwest::Client,
+    pub config: Settings,
+    pub db: tokio_postgres::Client,
 }
 
 impl MusicBrainzLightDownloadClient {

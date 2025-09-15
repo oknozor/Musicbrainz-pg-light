@@ -1,8 +1,12 @@
 use std::path::PathBuf;
 
+use crate::{pg::MusicBrainzLightDownloadClient, settings::Settings};
 use anyhow::Result;
-use musicbrainz_light_config::Settings;
-use musicbrainz_light_download::{MusicBrainzLightDownloadClient, github_sync};
+
+pub mod github_sync;
+pub mod init;
+pub mod pg;
+pub mod settings;
 
 #[tokio::main]
 async fn main() -> Result<()> {
