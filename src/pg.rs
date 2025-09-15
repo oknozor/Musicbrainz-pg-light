@@ -200,7 +200,7 @@ impl MusicBrainzLightDownloadClient {
     async fn get_latest(&self) -> Result<String> {
         Ok(self
             .client
-            .get(&format!("{}/LATEST", MUSICBRAINZ_FTP))
+            .get(format!("{}/LATEST", MUSICBRAINZ_FTP))
             .send()
             .await?
             .text()

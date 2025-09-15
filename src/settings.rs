@@ -33,14 +33,9 @@ pub struct TableSettings {
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct SchemaSettings {
     pub ignore: Vec<String>,
-}
-
-impl Default for SchemaSettings {
-    fn default() -> Self {
-        Self { ignore: Vec::new() }
-    }
 }
 
 impl Settings {
