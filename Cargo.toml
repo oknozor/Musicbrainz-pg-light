@@ -1,9 +1,9 @@
-[workspace]
-members = ["crates/*"]
-resolver = "3"
+[package]
+name = "mbpg-light"
+version = "0.1.0"
+edition = "2024"
 
-[workspace.dependencies]
-musicbrainz-light-config = { path = "crates/musicbrainz-light-config" }
+[dependencies]
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "macros"] }
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = "0.7.13"
@@ -20,3 +20,4 @@ bzip2 = "0.4"
 tar = "0.4"
 bytes = "1"
 octocrab = "0.45.0"
+indicatif = "0.17.0"
