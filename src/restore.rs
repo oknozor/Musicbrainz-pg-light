@@ -69,7 +69,6 @@ impl MbLight {
 
         for filename in filenames {
             let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
-            println!("Downloading {}", url);
             let tmpfile = NamedTempFile::new()?;
             let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
             self.download_with_progress(&url, &mut writer).await?;
@@ -114,9 +113,7 @@ impl MbLight {
                     .await?;
                 tokio::pin!(sink);
 
-                let mut buffer = vec![0u8; 8 * 1024 * 1024];
-                let mut progress_bytes: u64 = 0;
-                let update_interval: u64 = 32 * 1024 * 1024;
+                let mut buffer = vec![0u8; 8 * 256 * 1024];
                 loop {
                     let n = entry.read(&mut buffer)?;
                     if n == 0 {
@@ -124,15 +121,7 @@ impl MbLight {
                     }
                     let chunk = BytesMut::from(&buffer[..n]).freeze();
                     sink.send(chunk).await?;
-                    progress_bytes += n as u64;
-                    if progress_bytes >= update_interval {
-                        pb.inc(progress_bytes);
-                        progress_bytes = 0;
-                    }
-                }
-
-                if progress_bytes > 0 {
-                    pb.inc(progress_bytes);
+                    pb.inc(n as u64);
                 }
 
                 sink.finish().await?;
@@ -214,12 +203,10 @@ async fn should_skip_table(
     table: &str,
 ) -> Result<bool> {
     if config.schema.should_skip(schema) {
-        println!("Ignoring schema {}", schema);
         return Ok(true);
     }
 
     if config.tables.should_skip(table) {
-        println!("Ignoring table {}.{}", schema, table);
         return Ok(true);
     }
     let fulltable = format!("{}.{}", schema, table);
