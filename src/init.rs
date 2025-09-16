@@ -18,7 +18,7 @@ impl MbLight {
         ];
 
         for schema in schemas {
-            if self.config.schema.should_skip(&schema) {
+            if self.config.schema.should_skip(schema) {
                 continue;
             }
 
@@ -89,7 +89,7 @@ impl MbLight {
         ];
 
         for (schema, sql_script) in sql_scripts {
-            if self.config.schema.should_skip(&schema) {
+            if self.config.schema.should_skip(schema) {
                 continue;
             }
             let path = local_path.join(sql_script);
