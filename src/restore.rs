@@ -55,10 +55,10 @@ impl MbLight {
     pub async fn download_musicbrainz_data(&mut self) -> Result<()> {
         let mut filenames = vec![MB_DUMP, MB_DUMP_DERIVED, MB_DUMP_STATS];
 
-        if self.config.schema.should_skip(&"cover_art_archive") {
+        if !self.config.schema.should_skip("cover_art_archive") {
             filenames.push(COVER_ART_ARCHIVE);
         }
-        if self.config.schema.should_skip("event_art_archive") {
+        if !self.config.schema.should_skip("event_art_archive") {
             filenames.push(EVENT_ART_ARCHIVE);
         }
 
@@ -100,7 +100,7 @@ impl MbLight {
                 let pb = ProgressBar::new(entry_size);
                 pb.set_style(
                     ProgressStyle::default_bar()
-                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta}) - {msg}")
                         .unwrap()
                         .progress_chars("#>-"),
                 );
