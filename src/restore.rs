@@ -1,10 +1,12 @@
 use std::{
     fs::{self},
     io::Read,
+    str::FromStr,
 };
 
 use crate::settings::Settings;
 use anyhow::Result;
+use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
 use bytes::BytesMut;
 use bzip2::bufread::BzDecoder;
 use futures_util::{SinkExt, StreamExt};
@@ -25,32 +27,28 @@ const MUSICBRAINZ_FTP: &str = "http://ftp.musicbrainz.org/pub/musicbrainz/data/f
 pub struct MbLight {
     pub client: reqwest::Client,
     pub config: Settings,
-    pub db: tokio_postgres::Client,
+    pub pool: Pool<PostgresConnectionManager<NoTls>>,
 }
 
 impl MbLight {
     pub async fn new(config: Settings) -> Result<Self> {
         let conn_str = format!(
-            "host={} port={} user={} password={} dbname={}",
-            config.database.host,
-            config.database.port,
+            "postgresql://{}:{}@{}:{}/{}",
             config.database.user,
             config.database.password,
+            config.database.host,
+            config.database.port,
             config.database.name
         );
 
-        let (client, connection) = tokio_postgres::connect(&conn_str, NoTls).await?;
-
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("connection error: {}", e);
-            }
-        });
+        let pg_config = tokio_postgres::config::Config::from_str(&conn_str)?;
+        let manager = PostgresConnectionManager::new(pg_config, tokio_postgres::NoTls);
+        let pool = Pool::builder().build(manager).await?;
 
         Ok(Self {
             client: reqwest::Client::new(),
             config,
-            db: client,
+            pool,
         })
     }
 
@@ -67,8 +65,14 @@ impl MbLight {
         let latest = self.get_latest().await?;
         println!("Latest version: {}", latest);
 
+        let mut db = self.pool.get().await?;
+
         for filename in filenames {
-            let tmpfile = self.musicbrainz_download(&latest, filename).await?;
+            let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
+            println!("Downloading {}", url);
+            let tmpfile = NamedTempFile::new()?;
+            let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
+            self.download_with_progress(&url, &mut writer).await?;
             let mut archive = get_archive(tmpfile)?;
 
             for entry in archive.entries()? {
@@ -87,7 +91,7 @@ impl MbLight {
                     .split_once('.')
                     .unwrap_or(("musicbrainz", filename));
 
-                if self.should_skip_table(schema, table).await? {
+                if should_skip_table(&self.config, &db, schema, table).await? {
                     continue;
                 }
 
@@ -102,10 +106,9 @@ impl MbLight {
                         .progress_chars("#>-"),
                 );
 
-                self.db
-                    .execute(&format!("ALTER TABLE {} SET UNLOGGED", table), &[])
+                db.execute(&format!("ALTER TABLE {} SET UNLOGGED", table), &[])
                     .await?;
-                let tx = self.db.transaction().await?;
+                let tx = db.transaction().await?;
                 let sink = tx
                     .copy_in(&format!("COPY {}.{} FROM STDIN", schema, table))
                     .await?;
@@ -135,76 +138,13 @@ impl MbLight {
                 sink.finish().await?;
                 tx.commit().await?;
 
-                self.db
-                    .execute(&format!("ALTER TABLE {} SET LOGGED", table), &[])
+                db.execute(&format!("ALTER TABLE {} SET LOGGED", table), &[])
                     .await?;
                 pb.finish_with_message("Entry done!");
             }
         }
 
         Ok(())
-    }
-
-    async fn musicbrainz_download(
-        &mut self,
-        latest: &String,
-        filename: &str,
-    ) -> Result<NamedTempFile> {
-        let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
-        println!("Downloading {}", url);
-        let tmpfile = NamedTempFile::new()?;
-        let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
-        self.download_with_progress(&url, &mut writer).await?;
-        Ok(tmpfile)
-    }
-
-    async fn should_skip_table(&self, schema: &str, table: &str) -> Result<bool> {
-        if self.config.schema.should_skip(schema) {
-            println!("Ignoring schema {}", schema);
-            return Ok(true);
-        }
-
-        if self.config.tables.should_skip(table) {
-            println!("Ignoring table {}.{}", schema, table);
-            return Ok(true);
-        }
-        let fulltable = format!("{}.{}", schema, table);
-
-        let table_exists: bool = self
-            .db
-            .query_one(
-                "SELECT EXISTS (
-                     SELECT FROM information_schema.tables
-                     WHERE table_schema = $1 AND table_name = $2
-                 )",
-                &[&schema, &table],
-            )
-            .await?
-            .get(0);
-
-        if !table_exists {
-            println!("Skipping {} (table {} does not exist)", table, fulltable);
-            return Ok(true);
-        }
-
-        let has_data: bool = self
-            .db
-            .query_one(
-                &format!("SELECT EXISTS (SELECT 1 FROM {} LIMIT 1)", fulltable),
-                &[],
-            )
-            .await?
-            .get(0);
-
-        if has_data {
-            println!(
-                "Skipping {} (table {} already contains data)",
-                table, fulltable
-            );
-            return Ok(true);
-        }
-
-        Ok(false)
     }
 
     async fn get_latest(&self) -> Result<String> {
@@ -266,4 +206,55 @@ fn get_archive(
     let decompressor = BzDecoder::new(reader);
     let archive = Archive::new(decompressor);
     Ok(archive)
+}
+async fn should_skip_table(
+    config: &Settings,
+    db: &tokio_postgres::Client,
+    schema: &str,
+    table: &str,
+) -> Result<bool> {
+    if config.schema.should_skip(schema) {
+        println!("Ignoring schema {}", schema);
+        return Ok(true);
+    }
+
+    if config.tables.should_skip(table) {
+        println!("Ignoring table {}.{}", schema, table);
+        return Ok(true);
+    }
+    let fulltable = format!("{}.{}", schema, table);
+
+    let table_exists: bool = db
+        .query_one(
+            "SELECT EXISTS (
+                     SELECT FROM information_schema.tables
+                     WHERE table_schema = $1 AND table_name = $2
+                 )",
+            &[&schema, &table],
+        )
+        .await?
+        .get(0);
+
+    if !table_exists {
+        println!("Skipping {} (table {} does not exist)", table, fulltable);
+        return Ok(true);
+    }
+
+    let has_data: bool = db
+        .query_one(
+            &format!("SELECT EXISTS (SELECT 1 FROM {} LIMIT 1)", fulltable),
+            &[],
+        )
+        .await?
+        .get(0);
+
+    if has_data {
+        println!(
+            "Skipping {} (table {} already contains data)",
+            table, fulltable
+        );
+        return Ok(true);
+    }
+
+    Ok(false)
 }
