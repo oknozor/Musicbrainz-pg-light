@@ -1,16 +1,17 @@
+use crate::settings::Settings;
+use anyhow::Result;
+use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
+use bytes::Bytes;
+use bzip2::bufread::BzDecoder;
+use futures::stream::{self, StreamExt, TryStreamExt};
+use futures_util::SinkExt;
+use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use std::{
+    fmt::Write,
     fs::{self},
     io::Read,
     str::FromStr,
 };
-
-use crate::settings::Settings;
-use anyhow::Result;
-use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
-use bytes::BytesMut;
-use bzip2::bufread::BzDecoder;
-use futures_util::{SinkExt, StreamExt};
-use indicatif::{ProgressBar, ProgressStyle};
 use tar::Archive;
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncWriteExt, BufWriter};
@@ -43,7 +44,10 @@ impl MbLight {
 
         let pg_config = tokio_postgres::config::Config::from_str(&conn_str)?;
         let manager = PostgresConnectionManager::new(pg_config, tokio_postgres::NoTls);
-        let pool = Pool::builder().build(manager).await?;
+        let pool = Pool::builder()
+            .max_size(num_cpus::get() as u32 + 2)
+            .build(manager)
+            .await?;
 
         Ok(Self {
             client: reqwest::Client::new(),
@@ -55,7 +59,7 @@ impl MbLight {
     pub async fn download_musicbrainz_data(&mut self) -> Result<()> {
         let mut filenames = vec![MB_DUMP, MB_DUMP_DERIVED, MB_DUMP_STATS];
 
-        if self.config.schema.should_skip(&"cover_art_archive") {
+        if self.config.schema.should_skip("cover_art_archive") {
             filenames.push(COVER_ART_ARCHIVE);
         }
         if self.config.schema.should_skip("event_art_archive") {
@@ -65,18 +69,19 @@ impl MbLight {
         let latest = self.get_latest().await?;
         println!("Latest version: {}", latest);
 
-        let mut db = self.pool.get().await?;
-
         for filename in filenames {
             let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
             println!("Downloading {}", url);
+
             let tmpfile = NamedTempFile::new()?;
             let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
             self.download_with_progress(&url, &mut writer).await?;
+
             let mut archive = get_archive(tmpfile)?;
 
+            let mut entries_to_process = Vec::new();
             for entry in archive.entries()? {
-                let mut entry = entry?;
+                let entry = entry?;
                 let path = entry.path()?;
                 let name = path.to_string_lossy().into_owned();
 
@@ -91,57 +96,75 @@ impl MbLight {
                     .split_once('.')
                     .unwrap_or(("musicbrainz", filename));
 
-                if should_skip_table(&self.config, &db, schema, table).await? {
+                let db = &self.pool.get().await?;
+                let config = &self.config;
+                if should_skip_table(config, db, schema, table).await? {
                     continue;
                 }
 
-                println!("Starting copy for table {}.{}", schema, table);
-
-                let entry_size = entry.size();
-                let pb = ProgressBar::new(entry_size);
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-                        .unwrap()
-                        .progress_chars("#>-"),
-                );
-
-                db.execute(&format!("ALTER TABLE {} SET UNLOGGED", table), &[])
-                    .await?;
-                let tx = db.transaction().await?;
-                let sink = tx
-                    .copy_in(&format!("COPY {}.{} FROM STDIN", schema, table))
-                    .await?;
-                tokio::pin!(sink);
-
-                let mut buffer = vec![0u8; 8 * 1024 * 1024];
-                let mut progress_bytes: u64 = 0;
-                let update_interval: u64 = 32 * 1024 * 1024;
-                loop {
-                    let n = entry.read(&mut buffer)?;
-                    if n == 0 {
-                        break;
-                    }
-                    let chunk = BytesMut::from(&buffer[..n]).freeze();
-                    sink.send(chunk).await?;
-                    progress_bytes += n as u64;
-                    if progress_bytes >= update_interval {
-                        pb.inc(progress_bytes);
-                        progress_bytes = 0;
-                    }
-                }
-
-                if progress_bytes > 0 {
-                    pb.inc(progress_bytes);
-                }
-
-                sink.finish().await?;
-                tx.commit().await?;
-
-                db.execute(&format!("ALTER TABLE {} SET LOGGED", table), &[])
-                    .await?;
-                pb.finish_with_message("Entry done!");
+                entries_to_process.push((entry, schema.to_string(), table.to_string()));
             }
+
+            let multi_pb = MultiProgress::new();
+            let pb_main = multi_pb.add(ProgressBar::new(entries_to_process.len() as u64));
+            pb_main.set_message("total - ");
+            let pb_style = ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})",
+            )
+            .unwrap()
+            .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+            .progress_chars("#>-");
+
+            stream::iter(entries_to_process)
+                .map(Ok)
+                .try_for_each_concurrent(num_cpus::get(), |(mut entry, schema, table)| {
+                    let multi_pb = multi_pb.clone();
+                    let pb_main = pb_main.clone();
+                    let pool = self.pool.clone();
+                    let style = pb_style.clone();
+
+                    async move {
+                        let mut db = pool.get().await?;
+                        let entry_size = entry.size();
+                        let pb = multi_pb.insert_before(&pb_main, ProgressBar::new(entry_size));
+                        pb.set_style(style.clone());
+                        pb.set_message(format!("{} - ", table));
+
+                        db.execute(&format!("ALTER TABLE {} SET UNLOGGED", table), &[])
+                            .await?;
+
+                        let tx = db.transaction().await?;
+                        let sink = tx
+                            .copy_in(&format!("COPY {}.{} FROM STDIN", schema, table))
+                            .await?;
+                        tokio::pin!(sink);
+
+                        let mut buffer = vec![0u8; 8 * 1024 * 1024];
+
+                        loop {
+                            let n = entry.read(&mut buffer)?;
+                            if n == 0 {
+                                break;
+                            }
+                            sink.send(Bytes::copy_from_slice(&buffer[..n])).await?;
+                            pb.inc(n as u64);
+                        }
+
+                        sink.finish().await?;
+                        tx.commit().await?;
+
+                        db.execute(&format!("ALTER TABLE {} SET LOGGED", table), &[])
+                            .await?;
+
+                        pb.finish_with_message("Entry done!");
+                        pb_main.inc(1);
+                        anyhow::Ok(())
+                    }
+                })
+                .await?;
+
+            pb_main.finish_with_message("All entries done!");
+            multi_pb.clear()?;
         }
 
         Ok(())
@@ -214,12 +237,10 @@ async fn should_skip_table(
     table: &str,
 ) -> Result<bool> {
     if config.schema.should_skip(schema) {
-        println!("Ignoring schema {}", schema);
         return Ok(true);
     }
 
     if config.tables.should_skip(table) {
-        println!("Ignoring table {}.{}", schema, table);
         return Ok(true);
     }
     let fulltable = format!("{}.{}", schema, table);
