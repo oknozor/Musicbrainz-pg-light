@@ -17,4 +17,4 @@ bzip2 = "0.4"
 tar = "0.4"
 bytes = "1"
 octocrab = "0.45.0"
-indicatif = "0.17.0"
+indicatif = { version = "0.18", features = ["tokio"] }
