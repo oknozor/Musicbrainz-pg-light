@@ -5,13 +5,13 @@ use std::{
 
 use crate::settings::Settings;
 use anyhow::Result;
-use bytes::Bytes;
+use bytes::BytesMut;
 use bzip2::bufread::BzDecoder;
 use futures_util::{SinkExt, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use tar::Archive;
 use tempfile::NamedTempFile;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio_postgres::NoTls;
 
 const MB_DUMP: &str = "mbdump.tar.bz2";
@@ -22,13 +22,13 @@ const MB_DUMP_STATS: &str = "mbdump-stats.tar.bz2";
 
 const MUSICBRAINZ_FTP: &str = "http://ftp.musicbrainz.org/pub/musicbrainz/data/fullexport";
 
-pub struct MusicBrainzLightDownloadClient {
+pub struct MbLight {
     pub client: reqwest::Client,
     pub config: Settings,
     pub db: tokio_postgres::Client,
 }
 
-impl MusicBrainzLightDownloadClient {
+impl MbLight {
     pub async fn new(config: Settings) -> Result<Self> {
         let conn_str = format!(
             "host={} port={} user={} password={} dbname={}",
@@ -57,20 +57,10 @@ impl MusicBrainzLightDownloadClient {
     pub async fn download_musicbrainz_data(&mut self) -> Result<()> {
         let mut filenames = vec![MB_DUMP, MB_DUMP_DERIVED, MB_DUMP_STATS];
 
-        if !self
-            .config
-            .schema
-            .ignore
-            .contains(&"cover_art_archive".to_string())
-        {
+        if self.config.schema.should_skip(&"cover_art_archive") {
             filenames.push(COVER_ART_ARCHIVE);
         }
-        if !self
-            .config
-            .schema
-            .ignore
-            .contains(&"event_art_archive".to_string())
-        {
+        if self.config.schema.should_skip("event_art_archive") {
             filenames.push(EVENT_ART_ARCHIVE);
         }
 
@@ -84,13 +74,11 @@ impl MusicBrainzLightDownloadClient {
             let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
             self.download_with_progress(&url, &mut writer).await?;
 
-            // Open file and wrap in BZ2 decoder
             let f = fs::File::open(&tmpfile)?;
             let reader = std::io::BufReader::new(f);
             let decompressor = BzDecoder::new(reader);
             let mut archive = Archive::new(decompressor);
 
-            // Iterate tar entries
             for entry in archive.entries()? {
                 let mut entry = entry?;
                 let path = entry.path()?;
@@ -108,7 +96,6 @@ impl MusicBrainzLightDownloadClient {
                     .unwrap_or(("musicbrainz", filename));
 
                 if self.should_skip_table(schema, table).await? {
-                    println!("Skipping {}", filename);
                     continue;
                 }
 
@@ -129,14 +116,25 @@ impl MusicBrainzLightDownloadClient {
                     .await?;
                 tokio::pin!(sink);
 
-                let mut buffer = [0u8; 1024 * 1024];
+                let mut buffer = vec![0u8; 8 * 1024 * 1024];
+                let mut progress_bytes: u64 = 0;
+                let update_interval: u64 = 32 * 1024 * 1024;
                 loop {
                     let n = entry.read(&mut buffer)?;
                     if n == 0 {
                         break;
                     }
-                    sink.send(Bytes::copy_from_slice(&buffer[..n])).await?;
-                    pb.inc(n as u64);
+                    let chunk = BytesMut::from(&buffer[..n]).freeze();
+                    sink.send(chunk).await?;
+                    progress_bytes += n as u64;
+                    if progress_bytes >= update_interval {
+                        pb.inc(progress_bytes);
+                        progress_bytes = 0;
+                    }
+                }
+
+                if progress_bytes > 0 {
+                    pb.inc(progress_bytes);
                 }
 
                 sink.finish().await?;
@@ -149,12 +147,12 @@ impl MusicBrainzLightDownloadClient {
     }
 
     async fn should_skip_table(&self, schema: &str, table: &str) -> Result<bool> {
-        if self.config.schema.ignore.contains(&schema.into()) {
+        if self.config.schema.should_skip(schema) {
             println!("Ignoring schema {}", schema);
             return Ok(true);
         }
 
-        if self.config.tables.ignore.contains(&table.into()) {
+        if self.config.tables.should_skip(table) {
             println!("Ignoring table {}.{}", schema, table);
             return Ok(true);
         }
@@ -217,21 +215,30 @@ impl MusicBrainzLightDownloadClient {
         let response = self.client.get(url).send().await?;
         let total_size = response.content_length().unwrap_or(0);
 
-        // Create a progress bar
         let pb = ProgressBar::new(total_size);
         pb.set_style(
             ProgressStyle::default_bar()
-                .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .template("{msg}\n - [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
                 .unwrap()
                 .progress_chars("=>-"),
         );
         pb.set_message(format!("Downloading {}", url));
-
+        let mut writer = BufWriter::with_capacity(8 * 1024 * 1024, tmpfile);
         let mut stream = response.bytes_stream();
+        let mut buffered_progress: u64 = 0;
+        let update_interval: u64 = 256 * 1024;
         while let Some(chunk) = stream.next().await {
             let data = chunk?;
-            tmpfile.write_all(&data).await?;
-            pb.inc(data.len() as u64);
+            writer.write_all(&data).await?;
+            buffered_progress += data.len() as u64;
+            if buffered_progress >= update_interval {
+                pb.inc(buffered_progress);
+                buffered_progress = 0;
+            }
+        }
+
+        if buffered_progress > 0 {
+            pb.inc(buffered_progress);
         }
 
         pb.finish_with_message(format!("Downloaded {}", url));

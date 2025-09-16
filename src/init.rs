@@ -2,9 +2,9 @@ use std::{fs, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::MusicBrainzLightDownloadClient;
+use crate::MbLight;
 
-impl MusicBrainzLightDownloadClient {
+impl MbLight {
     pub async fn create_schemas(&self) -> Result<()> {
         let schemas = [
             "musicbrainz",
@@ -17,7 +17,7 @@ impl MusicBrainzLightDownloadClient {
         ];
 
         for schema in schemas {
-            if self.config.schema.ignore.contains(&schema.to_string()) {
+            if self.config.schema.should_skip(&schema) {
                 continue;
             }
 
@@ -73,46 +73,39 @@ impl MusicBrainzLightDownloadClient {
         ];
 
         for (schema, sql_script) in sql_scripts {
-            if self.config.schema.ignore.contains(&schema.to_string()) {
+            if self.config.schema.should_skip(schema) {
                 continue;
             }
-            // Prepend schema path if needed
             let path = local_path.join(sql_script);
             self.run_sql_file(path.to_str().unwrap()).await?;
         }
 
         let sql_scripts = vec![
-            // primary keys
             ("musicbrainz", "CreatePrimaryKeys.sql"),
             ("cover_art_archive", "caa/CreatePrimaryKeys.sql"),
             ("event_art_archive", "eaa/CreatePrimaryKeys.sql"),
             ("statistics", "statistics/CreatePrimaryKeys.sql"),
             ("documentation", "documentation/CreatePrimaryKeys.sql"),
             ("wikidocs", "wikidocs/CreatePrimaryKeys.sql"),
-            // functions
             ("musicbrainz", "CreateFunctions.sql"),
             ("musicbrainz", "CreateMirrorOnlyFunctions.sql"),
             ("cover_art_archive", "caa/CreateFunctions.sql"),
             ("event_art_archive", "eaa/CreateFunctions.sql"),
-            // indexes
             ("musicbrainz", "CreateIndexes.sql"),
             ("musicbrainz", "CreateMirrorIndexes.sql"),
             ("cover_art_archive", "caa/CreateIndexes.sql"),
             ("event_art_archive", "eaa/CreateIndexes.sql"),
             ("statistics", "statistics/CreateIndexes.sql"),
-            // views
             ("musicbrainz", "CreateViews.sql"),
             ("cover_art_archive", "caa/CreateViews.sql"),
             ("event_art_archive", "eaa/CreateViews.sql"),
-            // triggers
             ("musicbrainz", "CreateMirrorOnlyTriggers.sql"),
-            // replication
             ("musicbrainz", "ReplicationSetup.sql"),
             ("dbmirror2", "dbmirror2/ReplicationSetup.sql"),
         ];
 
         for (schema, sql_script) in sql_scripts {
-            if self.config.schema.ignore.contains(&schema.to_string()) {
+            if self.config.schema.should_skip(&schema) {
                 continue;
             }
             let path = local_path.join(sql_script);
