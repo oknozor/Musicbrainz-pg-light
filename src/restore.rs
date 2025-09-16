@@ -68,21 +68,13 @@ impl MbLight {
         println!("Latest version: {}", latest);
 
         for filename in filenames {
-            let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
-            println!("Downloading {}", url);
-            let tmpfile = NamedTempFile::new()?;
-            let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
-            self.download_with_progress(&url, &mut writer).await?;
-
-            let f = fs::File::open(&tmpfile)?;
-            let reader = std::io::BufReader::new(f);
-            let decompressor = BzDecoder::new(reader);
-            let mut archive = Archive::new(decompressor);
+            let tmpfile = self.musicbrainz_download(&latest, filename).await?;
+            let mut archive = get_archive(tmpfile)?;
 
             for entry in archive.entries()? {
                 let mut entry = entry?;
                 let path = entry.path()?;
-                let name = path.to_string_lossy();
+                let name = path.to_string_lossy().into_owned();
 
                 if !name.starts_with("mbdump/") {
                     continue;
@@ -110,6 +102,9 @@ impl MbLight {
                         .progress_chars("#>-"),
                 );
 
+                self.db
+                    .execute(&format!("ALTER TABLE {} SET UNLOGGED", table), &[])
+                    .await?;
                 let tx = self.db.transaction().await?;
                 let sink = tx
                     .copy_in(&format!("COPY {}.{} FROM STDIN", schema, table))
@@ -139,11 +134,28 @@ impl MbLight {
 
                 sink.finish().await?;
                 tx.commit().await?;
+
+                self.db
+                    .execute(&format!("ALTER TABLE {} SET LOGGED", table), &[])
+                    .await?;
                 pb.finish_with_message("Entry done!");
             }
         }
 
         Ok(())
+    }
+
+    async fn musicbrainz_download(
+        &mut self,
+        latest: &String,
+        filename: &str,
+    ) -> Result<NamedTempFile> {
+        let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
+        println!("Downloading {}", url);
+        let tmpfile = NamedTempFile::new()?;
+        let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
+        self.download_with_progress(&url, &mut writer).await?;
+        Ok(tmpfile)
     }
 
     async fn should_skip_table(&self, schema: &str, table: &str) -> Result<bool> {
@@ -244,4 +256,14 @@ impl MbLight {
         pb.finish_with_message(format!("Downloaded {}", url));
         Ok(())
     }
+}
+
+fn get_archive(
+    tmpfile: NamedTempFile,
+) -> Result<Archive<BzDecoder<std::io::BufReader<fs::File>>>, anyhow::Error> {
+    let f = fs::File::open(&tmpfile)?;
+    let reader = std::io::BufReader::new(f);
+    let decompressor = BzDecoder::new(reader);
+    let archive = Archive::new(decompressor);
+    Ok(archive)
 }
