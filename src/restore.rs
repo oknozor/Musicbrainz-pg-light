@@ -1,20 +1,23 @@
 use std::{
-    fs::{self},
-    io::Read,
+    fs::{File, OpenOptions},
+    io::{BufReader, BufWriter, Read, Write},
+    path::Path,
     str::FromStr,
 };
 
 use crate::settings::Settings;
-use anyhow::Result;
-use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
-use bytes::BytesMut;
+use anyhow::{Context, Result};
+use bb8_postgres::{
+    PostgresConnectionManager,
+    bb8::{Pool, PooledConnection},
+};
+use bytes::Bytes;
 use bzip2::bufread::BzDecoder;
 use futures_util::{SinkExt, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
-use tar::Archive;
+use tar::{Archive, Entry};
 use tempfile::NamedTempFile;
-use tokio::io::{AsyncWriteExt, BufWriter};
-use tokio_postgres::NoTls;
+use tokio_postgres::{CopyInSink, NoTls};
 
 const MB_DUMP: &str = "mbdump.tar.bz2";
 const MB_DUMP_DERIVED: &str = "mbdump-derived.tar.bz2";
@@ -52,9 +55,12 @@ impl MbLight {
         })
     }
 
-    pub async fn download_musicbrainz_data(&mut self) -> Result<()> {
-        let mut filenames = vec![MB_DUMP, MB_DUMP_DERIVED, MB_DUMP_STATS];
+    pub async fn ingest_musicbrainz_data(&mut self) -> Result<()> {
+        let mut filenames = vec![MB_DUMP, MB_DUMP_DERIVED];
 
+        if !self.config.schema.should_skip("statistics") {
+            filenames.push(MB_DUMP_STATS);
+        }
         if !self.config.schema.should_skip("cover_art_archive") {
             filenames.push(COVER_ART_ARCHIVE);
         }
@@ -65,71 +71,57 @@ impl MbLight {
         let latest = self.get_latest().await?;
         println!("Latest version: {}", latest);
 
-        let mut db = self.pool.get().await?;
-
         for filename in filenames {
             let url = format!("{}/{}/{}", MUSICBRAINZ_FTP, latest, filename);
-            let tmpfile = NamedTempFile::new()?;
-            let mut writer = tokio::fs::File::from_std(tmpfile.reopen()?);
+            let tempfile = NamedTempFile::new()?;
+            let mut writer = tempfile.reopen()?;
             self.download_with_progress(&url, &mut writer).await?;
-            let mut archive = get_archive(tmpfile)?;
+            let mut archive = get_archive(tempfile.path())?;
+            let pool = self.pool.clone();
+            let config = self.config.clone();
 
+            println!("Starting pg_copy for {filename}");
+
+            let mut db = pool.get().await?;
             for entry in archive.entries()? {
-                let mut entry = entry?;
-                let path = entry.path()?;
-                let name = path.to_string_lossy().into_owned();
+                match entry {
+                    Ok(entry) => {
+                        let path = entry.path()?;
+                        let entry_size = entry.header().entry_size()?;
+                        let name = path.to_string_lossy().into_owned();
 
-                if !name.starts_with("mbdump/") {
-                    continue;
-                }
+                        if !name.starts_with("mbdump/") {
+                            continue;
+                        }
 
-                let filename = name.strip_prefix("mbdump/").unwrap();
-                let filename = filename.strip_suffix("_sanitised").unwrap_or(filename);
+                        let filename = name.strip_prefix("mbdump/").unwrap();
+                        let filename = filename.strip_suffix("_sanitised").unwrap_or(filename);
 
-                let (schema, table) = filename
-                    .split_once('.')
-                    .unwrap_or(("musicbrainz", filename));
+                        let (schema, table) = filename
+                            .split_once('.')
+                            .unwrap_or(("musicbrainz", filename));
 
-                if should_skip_table(&self.config, &db, schema, table).await? {
-                    continue;
-                }
+                        if should_skip_table(&config, &db, schema, table).await? {
+                            continue;
+                        }
 
-                println!("Starting copy for table {}.{}", schema, table);
-
-                let entry_size = entry.size();
-                let pb = ProgressBar::new(entry_size);
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta}) - {msg}")
-                        .unwrap()
-                        .progress_chars("#>-"),
-                );
-
-                db.execute(&format!("ALTER TABLE {} SET UNLOGGED", table), &[])
-                    .await?;
-                let tx = db.transaction().await?;
-                let sink = tx
-                    .copy_in(&format!("COPY {}.{} FROM STDIN", schema, table))
-                    .await?;
-                tokio::pin!(sink);
-
-                let mut buffer = vec![0u8; 8 * 256 * 1024];
-                loop {
-                    let n = entry.read(&mut buffer)?;
-                    if n == 0 {
+                        let pb = ProgressBar::new(entry_size);
+                        pb.set_style(
+                                                        ProgressStyle::default_bar()
+                                                            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta}) - {msg}")
+                                                            .unwrap()
+                                                            .progress_chars("#>-"),
+                                                    );
+                        pb.set_message(table.to_string());
+                        pg_copy(&mut db, entry, schema, table, pb)
+                            .await
+                            .context(format!("in {schema}.{table}"))?;
+                    }
+                    Err(err) => {
+                        eprintln!("{err}");
                         break;
                     }
-                    let chunk = BytesMut::from(&buffer[..n]).freeze();
-                    sink.send(chunk).await?;
-                    pb.inc(n as u64);
                 }
-
-                sink.finish().await?;
-                tx.commit().await?;
-
-                db.execute(&format!("ALTER TABLE {} SET LOGGED", table), &[])
-                    .await?;
-                pb.finish_with_message("Entry done!");
             }
         }
 
@@ -148,11 +140,7 @@ impl MbLight {
             .to_string())
     }
 
-    async fn download_with_progress(
-        &self,
-        url: &str,
-        tmpfile: &mut tokio::fs::File,
-    ) -> anyhow::Result<()> {
+    async fn download_with_progress(&self, url: &str, tmpfile: &mut File) -> anyhow::Result<()> {
         let response = self.client.get(url).send().await?;
         let total_size = response.content_length().unwrap_or(0);
 
@@ -170,7 +158,7 @@ impl MbLight {
         let update_interval: u64 = 256 * 1024;
         while let Some(chunk) = stream.next().await {
             let data = chunk?;
-            writer.write_all(&data).await?;
+            writer.write_all(&data)?;
             buffered_progress += data.len() as u64;
             if buffered_progress >= update_interval {
                 pb.inc(buffered_progress);
@@ -187,15 +175,75 @@ impl MbLight {
     }
 }
 
-fn get_archive(
-    tmpfile: NamedTempFile,
-) -> Result<Archive<BzDecoder<std::io::BufReader<fs::File>>>, anyhow::Error> {
-    let f = fs::File::open(&tmpfile)?;
-    let reader = std::io::BufReader::new(f);
+pub async fn pg_copy(
+    db: &mut PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+    mut entry: Entry<'_, impl Read>,
+    schema: &str,
+    table: &str,
+    pb: ProgressBar,
+) -> Result<(), anyhow::Error> {
+    let mut debug_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open("/tmp/musicbrainz_tag_debug.tbl")?;
+    db.execute(
+        &format!("ALTER TABLE {}.{} SET UNLOGGED", schema, table),
+        &[],
+    )
+    .await
+    .context("Failed to set table to UNLOGGED")?;
+
+    let tx = db
+        .transaction()
+        .await
+        .context("Failed to start transaction")?;
+
+    let sink: CopyInSink<Bytes> = tx
+        .copy_in(&format!("COPY {}.{} FROM STDIN", schema, table))
+        .await
+        .context("Failed to start COPY")?;
+    tokio::pin!(sink);
+
+    let mut buffer = vec![0u8; 8 * 1024 * 1024];
+
+    loop {
+        let n = entry
+            .read(&mut buffer)
+            .context("Failed to read from archive entry")?;
+        if n == 0 {
+            break;
+        }
+
+        let chunk = Bytes::copy_from_slice(&buffer[..n]);
+        debug_file.write_all(&chunk)?;
+        sink.send(chunk)
+            .await
+            .context("Failed to send data chunk to Postgres")?;
+
+        pb.inc(n as u64);
+    }
+
+    sink.finish().await.context("Failed to close sink")?;
+
+    pb.set_message(format!("Committing on {schema}.{table}"));
+    tx.commit().await.context("Failed to commit transaction")?;
+    db.execute(&format!("ALTER TABLE {}.{} SET LOGGED", schema, table), &[])
+        .await
+        .context("Failed to restore LOGGED on table")?;
+
+    pb.finish_with_message(format!("{schema}.{table} COPY done!"));
+    Ok(())
+}
+
+fn get_archive(tmpfile: &Path) -> Result<Archive<impl Read>> {
+    let f = File::open(tmpfile)?;
+    let reader = BufReader::new(f);
     let decompressor = BzDecoder::new(reader);
     let archive = Archive::new(decompressor);
     Ok(archive)
 }
+
 async fn should_skip_table(
     config: &Settings,
     db: &tokio_postgres::Client,

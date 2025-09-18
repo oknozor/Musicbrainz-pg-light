@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use config::{Config, Environment, File};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct Settings {
     pub database: DatabaseSettings,
     pub musicbrainz: MusicBrainzSettings,
@@ -11,7 +11,7 @@ pub struct Settings {
     pub schema: SchemaSettings,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct DatabaseSettings {
     pub host: String,
     pub port: u16,
@@ -20,13 +20,13 @@ pub struct DatabaseSettings {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct MusicBrainzSettings {
     pub base_url: String,
     pub token: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct TableSettings {
     keep_only: Vec<String>,
 }
@@ -37,9 +37,7 @@ impl TableSettings {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(default)]
-#[derive(Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct SchemaSettings {
     keep_only: Vec<String>,
 }

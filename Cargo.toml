@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = "0.7.13"
+tokio-util = { version = "0.7.16", features = ["compat", "futures-util"] }
 bb8-postgres = "0.9.0"
 futures-util = "0.3"
 serde = { version = "1", features = ["derive"] }
@@ -13,7 +14,7 @@ anyhow = "1"
 config = "0.15.15"
 reqwest = { version = "0.12.23", features = ["stream"] }
 tempfile = "3"
-bzip2 = "0.4"
+bzip2 =  "0.4"
 tar = "0.4"
 bytes = "1"
 octocrab = "0.45.0"

@@ -1,6 +1,5 @@
-use std::{fs, path::PathBuf};
-
 use anyhow::Result;
+use std::{fs, path::PathBuf};
 
 use crate::MbLight;
 
@@ -30,40 +29,7 @@ impl MbLight {
         Ok(())
     }
 
-    pub async fn run_all_scripts(&self, local_path: PathBuf) -> Result<()> {
-        let conn = self.pool.get().await?;
-        run_sql_file(local_path.join("Extensions.sql").to_str().unwrap(), &conn).await?;
-
-        run_sql_file(
-            local_path
-                .join("CreateSearchConfiguration.sql")
-                .to_str()
-                .unwrap(),
-            &conn,
-        )
-        .await?;
-
-        let sql_scripts = vec![
-            // types
-            ("musicbrainz", "CreateCollations.sql"),
-            ("musicbrainz", "CreateTypes.sql"),
-            // tables
-            ("musicbrainz", "CreateTables.sql"),
-            ("cover_art_archive", "caa/CreateTables.sql"),
-            ("event_art_archive", "eaa/CreateTables.sql"),
-            ("statistics", "statistics/CreateTables.sql"),
-            ("documentation", "documentation/CreateTables.sql"),
-            ("wikidocs", "wikidocs/CreateTables.sql"),
-        ];
-
-        for (schema, sql_script) in sql_scripts {
-            if self.config.schema.should_skip(schema) {
-                continue;
-            }
-            let path = local_path.join(sql_script);
-            run_sql_file(path.to_str().unwrap(), &conn).await?;
-        }
-
+    pub async fn run_all_scripts(&mut self, local_path: PathBuf) -> Result<()> {
         let sql_scripts = vec![
             ("musicbrainz", "CreatePrimaryKeys.sql"),
             ("cover_art_archive", "caa/CreatePrimaryKeys.sql"),
@@ -88,6 +54,7 @@ impl MbLight {
             ("dbmirror2", "dbmirror2/ReplicationSetup.sql"),
         ];
 
+        let conn = self.pool.get().await?;
         for (schema, sql_script) in sql_scripts {
             if self.config.schema.should_skip(schema) {
                 continue;
@@ -96,6 +63,39 @@ impl MbLight {
             run_sql_file(path.to_str().unwrap(), &conn).await?;
         }
 
+        Ok(())
+    }
+
+    pub async fn create_tables(&mut self, local_path: &PathBuf) -> Result<()> {
+        let conn = self.pool.get().await?;
+        run_sql_file(local_path.join("Extensions.sql").to_str().unwrap(), &conn).await?;
+        run_sql_file(
+            local_path
+                .join("CreateSearchConfiguration.sql")
+                .to_str()
+                .unwrap(),
+            &conn,
+        )
+        .await?;
+        let sql_scripts = vec![
+            // types
+            ("musicbrainz", "CreateCollations.sql"),
+            ("musicbrainz", "CreateTypes.sql"),
+            // tables
+            ("musicbrainz", "CreateTables.sql"),
+            ("cover_art_archive", "caa/CreateTables.sql"),
+            ("event_art_archive", "eaa/CreateTables.sql"),
+            ("statistics", "statistics/CreateTables.sql"),
+            ("documentation", "documentation/CreateTables.sql"),
+            ("wikidocs", "wikidocs/CreateTables.sql"),
+        ];
+        for (schema, sql_script) in sql_scripts {
+            if self.config.schema.should_skip(schema) {
+                continue;
+            }
+            let path = local_path.join(sql_script);
+            run_sql_file(path.to_str().unwrap(), &conn).await?;
+        }
         Ok(())
     }
 }
