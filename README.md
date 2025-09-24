@@ -3,7 +3,7 @@
 # MusicBrainz Light
 
 [![Crates.io](https://img.shields.io/crates/v/musicbrainz-light)](https://crates.io/crates/musicbrainz-light)
-[![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/oknozor/musicbrainz-light)](https://github.com/oknozor/musicbrainz-light/tags)
+[![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/oknozor/mbpg-light)](https://github.com/oknozor/mbpg-light/tags)
 [![CI](https://github.com/oknozor/mbpg-light/actions/workflows/CI.yaml/badge.svg)](https://github.com/oknozor/mbpg-light/actions/workflows/CI.yaml)
 
 </div>
