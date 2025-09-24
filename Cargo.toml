@@ -1,6 +1,6 @@
 [package]
 name = "musicbrainz-light"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["oknozor <paul.delafosse@protonmail.com>"]
 description = "A lightweight MusicBrainz database importer and processor"

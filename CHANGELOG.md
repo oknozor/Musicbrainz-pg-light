@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [0.1.1](https://github.com/oknozor/musicbrainz-light/compare/5dbcaf0e2cda635afa3d864c0c31e5f5e5c6c1b1..0.1.1) - 2025-09-24
+#### Bug Fixes
+- add crates.io metadata - ([5dbcaf0](https://github.com/oknozor/musicbrainz-light/commit/5dbcaf0e2cda635afa3d864c0c31e5f5e5c6c1b1)) - [@oknozor](https://github.com/oknozor)
+
+- - -
+
 ## [0.1.0](https://github.com/oknozor/musicbrainz-light/compare/ce6ad024c3494666bfeb44994451dd75fe81a7fa..0.1.0) - 2025-09-24
 #### Bug Fixes
 - typo - ([1b9d6fa](https://github.com/oknozor/musicbrainz-light/commit/1b9d6fa6a5ba620b7bee62b77dcc91bce7170136)) - [@oknozor](https://github.com/oknozor)
