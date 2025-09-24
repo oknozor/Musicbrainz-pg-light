@@ -1,5 +1,5 @@
 use clap::Parser;
-use color_eyre::Result;
+use color_eyre::{Result, config::HookBuilder};
 use musicbrainz_light::{MbLight, settings::Settings};
 use sqlx::postgres::PgPoolOptions;
 use tracing_indicatif::IndicatifLayer;
@@ -13,7 +13,12 @@ pub enum Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    color_eyre::install()?;
+    HookBuilder::default()
+        .panic_section(
+            "If you believe this is a bug, please file an issue at: https://github.com/oknozor/mbpg-light/issues\n\
+             Include a minimal reproduction and the output below."
+        )
+        .install()?;
     let indicatif_layer = IndicatifLayer::new();
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
