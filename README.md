@@ -141,6 +141,165 @@ This is useful for:
 - Focusing on specific data subsets
 - Testing with smaller datasets
 
+## Using as a library
+
+You can use `musicbrainz-light` as a library in your Rust projects for programmatic access to MusicBrainz database operations.
+
+### Add Dependency
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+musicbrainz-light = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"] }
+```
+
+### Feature Flags
+
+The library supports several optional features:
+
+- `progress` (default): Enables progress bars during operations
+- `notify`: Enables reindex notifications via `tokio::sync::mpsc::Sender`
+- `cli`: Command-line interface dependencies (not needed for library usage)
+
+```toml
+# Minimal library usage without CLI dependencies
+[dependencies]
+musicbrainz-light = { version = "0.1", default-features = false }
+
+# With progress bars
+[dependencies]
+musicbrainz-light = { version = "0.1", default-features = false, features = ["progress"] }
+
+# With notifications
+[dependencies]
+musicbrainz-light = { version = "0.1", default-features = false, features = ["notify"] }
+```
+
+### Basic Usage
+
+```rust
+use musicbrainz_light::{MbLight, settings::Settings, MbLightError};
+use sqlx::postgres::PgPoolOptions;
+
+#[tokio::main]
+async fn main() -> Result<(), MbLightError> {
+    // Load configuration
+    let config = Settings::get()?;
+
+    // Create database connection pool
+    let db = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&config.db_url())
+        .await?;
+
+    // Create MbLight instance
+    let mut mb_light = MbLight::try_new(config, db)?;
+
+    // Initialize database (first time setup)
+    mb_light.init().await?;
+
+    // Or sync with existing database
+    mb_light.sync().await?;
+
+    Ok(())
+}
+```
+
+### Configuration Options
+
+#### Using Default Settings
+
+The default `Settings` struct loads configuration from:
+1. Environment variables with `METADADA__` prefix
+2. `/etc/mblight/config.toml`
+3. `config.toml` in current directory
+
+```rust
+use musicbrainz_light::settings::Settings;
+
+let settings = Settings::get()?;
+```
+
+#### Custom Settings Implementation
+
+You can implement your own configuration by implementing the `MbLightSettingsExt` trait:
+
+```rust
+use musicbrainz_light::settings::MbLightSettingsExt;
+
+struct MyCustomSettings {
+    db_host: String,
+    db_user: String,
+    // ... other fields
+}
+
+impl MbLightSettingsExt for MyCustomSettings {
+    fn db_user(&self) -> &str { &self.db_user }
+    fn db_password(&self) -> &str { "my_password" }
+    fn db_host(&self) -> &str { &self.db_host }
+    fn db_port(&self) -> u16 { 5432 }
+    fn db_name(&self) -> &str { "musicbrainz" }
+    fn table_keep_only(&self) -> &Vec<String> { &vec![] }
+    fn schema_keep_only(&self) -> &Vec<String> { &vec![] }
+    fn musicbrainz_url(&self) -> &str { "https://data.musicbrainz.org" }
+    fn musicbrainz_token(&self) -> &str { "your_token" }
+    fn should_skip_table(&self, _table: &str) -> bool { false }
+    fn should_skip_schema(&self, _schema: &str) -> bool { false }
+}
+
+// Use with MbLight
+let custom_config = MyCustomSettings { /* ... */ };
+let mb_light = MbLight::try_new(custom_config, db_pool)?;
+```
+
+### With Notifications (notify feature)
+
+When using the `notify` feature, you can receive notifications when replication reaches the latest packet:
+
+```rust
+use tokio::sync::mpsc;
+
+async fn with_notifications() -> Result<(), MbLightError> {
+    let config = Settings::get()?;
+    let db = PgPoolOptions::new().connect(&config.db_url()).await?;
+
+    // Create notification channel
+    let (tx, mut rx) = mpsc::channel(10);
+
+    let mb_light = MbLight::try_new(config, db, tx)?;
+
+    // Spawn sync task
+    let sync_handle = tokio::spawn(async move {
+        mb_light.sync().await
+    });
+
+    // Listen for reindex notifications
+    tokio::spawn(async move {
+        while let Some(_) = rx.recv().await {
+            println!("Replication caught up - time to reindex!");
+            // Trigger your reindexing logic here
+        }
+    });
+
+    sync_handle.await??;
+    Ok(())
+}
+```
+
+### Utility Methods
+
+Check if a table has data:
+
+```rust
+let has_artists = mb_light.has_data("musicbrainz", "artist").await?;
+if has_artists {
+    println!("Artist table contains data");
+}
+```
+
 ## Development
 
 ### Prerequisites
