@@ -58,12 +58,12 @@ impl MbLightSettingsExt for Settings {
 
     fn should_skip_table(&self, table: &str) -> bool {
         let keep = self.table_keep_only();
-        !keep.is_empty() && keep.iter().find(|t| t == &table).is_none()
+        !keep.is_empty() && !keep.iter().any(|t| t == table)
     }
 
     fn should_skip_schema(&self, schema: &str) -> bool {
         let keep = self.schema_keep_only();
-        !keep.is_empty() && keep.iter().find(|s| s == &schema).is_none()
+        !keep.is_empty() && !keep.iter().any(|s| s == schema)
     }
 }
 
