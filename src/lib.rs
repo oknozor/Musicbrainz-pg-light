@@ -1,10 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use octocrab::Octocrab;
 use sqlx::PgPool;
 #[cfg(feature = "notify")]
 use tokio::sync::mpsc::Sender;
-use tokio::time;
 use tracing::{error, info};
 
 use crate::{error::MbLightResult, settings::MbLightSettingsExt};
@@ -66,8 +65,25 @@ impl<S: MbLightSettingsExt> MbLight<S> {
                         info!("Reached last replication packet, sending reindex signal");
                         self.reindex_sender.send(()).await?;
                     }
-                    info!("Waiting for 15 minutes for a fresh replication packet");
-                    time::sleep(Duration::from_secs(60 * 15)).await;
+                    #[cfg(not(feature = "cli"))]
+                    {
+                        info!("Waiting for 15 minutes for a fresh replication packet");
+                        time::sleep(Duration::from_secs(60 * 15)).await;
+                    }
+                    #[cfg(feature = "cli")]
+                    {
+                        use crate::musicbrainz_db::replication::replication_control::ReplicationControl;
+
+                        let control = ReplicationControl::get(&self.db).await?;
+                        info!(
+                            "Reached last replication packet, schema_sequence = {}, replication_sequence = {}, terminating",
+                            control.current_schema_sequence.expect("schema sequence"),
+                            control
+                                .current_replication_sequence
+                                .expect("replication sequence")
+                        );
+                        return Ok(());
+                    }
                 }
                 Err(err) => {
                     error!("Fatal error applying pending replication: {}", err);

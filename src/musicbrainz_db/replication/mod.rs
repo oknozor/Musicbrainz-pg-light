@@ -16,7 +16,7 @@ use tempfile::NamedTempFile;
 use tracing::{debug, error, info};
 
 mod pending_data;
-mod replication_control;
+pub(crate) mod replication_control;
 
 impl<S: MbLightSettingsExt> MbLight<S> {
     pub async fn apply_pending_replication(&self) -> Result<(), MbLightError> {
