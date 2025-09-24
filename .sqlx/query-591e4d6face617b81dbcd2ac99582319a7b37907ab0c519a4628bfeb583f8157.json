@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM dbmirror2.pending_data WHERE xid = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "591e4d6face617b81dbcd2ac99582319a7b37907ab0c519a4628bfeb583f8157"
+}

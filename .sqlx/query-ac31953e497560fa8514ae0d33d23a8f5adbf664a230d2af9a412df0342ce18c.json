@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "ALTER TABLE dbmirror2.pending_data DROP CONSTRAINT IF EXISTS tablename_exists;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ac31953e497560fa8514ae0d33d23a8f5adbf664a230d2af9a412df0342ce18c"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "TRUNCATE TABLE dbmirror2.pending_keys",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f68a95547f0c7d15c83766945dd30bc75f7b54a5ac34826384ba2a8f490a1223"
+}
