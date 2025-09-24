@@ -2,6 +2,14 @@
 name = "musicbrainz-light"
 version = "0.1.0"
 edition = "2024"
+authors = ["oknozor <paul.delafosse@protonmail.com>"]
+description = "A lightweight MusicBrainz database importer and processor"
+readme = "README.md"
+homepage = "https://github.com/yourusername/musicbrainz-light"
+repository = "https://github.com/yourusername/musicbrainz-light"
+license = "GPL-3.0-or-later"
+keywords = ["musicbrainz", "database", "music", "metadata", "postgresql"]
+categories = ["database", "command-line-utilities", "multimedia::audio"]
 
 [dependencies]
 tokio = { version = "1", features = ["fs", "macros", "rt", "rt-multi-thread"] }
