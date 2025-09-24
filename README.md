@@ -6,13 +6,13 @@ This project is a modernized clone of [mbslave](https://github.com/acoustid/mbsl
 
 ## Features
 
-- 🚀 **High Performance**: Written in Rust with async/await for optimal performance
+- 🚀 **Performance-Focused**: Written in Rust with async/await for improved performance
 - 🔄 **Automatic Schema Updates**: Handles schema changes automatically without manual intervention
-- 📦 **Easy Setup**: Simple configuration and Docker support
+- 📦 **Straightforward Setup**: Simple configuration and Docker support
 - 🎯 **Selective Sync**: Configure which schemas and tables to replicate
 - 📊 **Progress Tracking**: Built-in progress bars for long-running operations
 - 🔧 **Flexible Configuration**: Support for TOML files and environment variables
-- 🐳 **Docker Ready**: Includes Docker Compose setup for easy deployment
+- 🐳 **Docker Ready**: Includes Docker Compose setup for deployment
 
 ## Improvements over mbslave
 
@@ -74,11 +74,7 @@ keep_only = []
 To create a new MusicBrainz mirror from scratch:
 
 ```bash
-# Using binary
 mbpg-light init
-
-# Using cargo
-cargo run --bin mbpg-light -- init
 ```
 
 This command will:
@@ -93,11 +89,7 @@ This command will:
 To keep your database up-to-date with incremental changes:
 
 ```bash
-# Using binary
 mbpg-light sync
-
-# Using cargo
-cargo run --bin mbpg-light -- sync
 ```
 
 This command will:
@@ -105,21 +97,6 @@ This command will:
 2. Automatically handle schema updates
 3. Process pending data changes
 4. Continue until all updates are applied
-
-### Docker Usage
-
-Using the provided Docker Compose setup:
-
-```bash
-# Start PostgreSQL
-docker-compose up -d db
-
-# Initialize the database
-docker-compose run --rm app init
-
-# Run continuous sync
-docker-compose run --rm app sync
-```
 
 ## Logging
 
@@ -131,9 +108,6 @@ export RUST_LOG=mbpg_light=info,musicbrainz_light=info
 
 # Debug level
 export RUST_LOG=mbpg_light=debug,musicbrainz_light=debug
-
-# Trace level (very verbose)
-export RUST_LOG=trace
 ```
 
 ## Selective Replication
@@ -193,26 +167,6 @@ cargo build --no-default-features
 # Build with specific features
 cargo build --features "progress,notify"
 ```
-
-## Architecture
-
-The project is structured as follows:
-
-- `src/bin/mbpg-light.rs`: CLI entry point
-- `src/lib.rs`: Core library with main MbLight struct
-- `src/download/`: HTTP download functionality
-- `src/musicbrainz_db/`: Database operations and replication
-- `src/settings.rs`: Configuration management
-- `src/error.rs`: Error types and handling
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Run `cargo fmt` and `cargo clippy`
-6. Submit a pull request
 
 ## License
 
