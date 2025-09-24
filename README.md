@@ -3,7 +3,7 @@
 # MusicBrainz Light
 
 [![Crates.io](https://img.shields.io/crates/v/musicbrainz-light)](https://crates.io/crates/musicbrainz-light)
-[![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/your-org/musicbrainz-light)](https://github.com/your-org/musicbrainz-light/tags)
+[![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/oknozor/musicbrainz-light)](https://github.com/oknozor/musicbrainz-light/tags)
 [![CI](https://github.com/oknozor/mbpg-light/actions/workflows/CI.yaml/badge.svg)](https://github.com/oknozor/mbpg-light/actions/workflows/CI.yaml)
 
 </div>
@@ -35,7 +35,7 @@ This project is a modernized clone of [mbslave](https://github.com/acoustid/mbsl
 ### From Source
 
 ```bash
-git clone https://github.com/your-org/musicbrainz-light
+git clone https://github.com/oknozor/musicbrainz-light
 cd musicbrainz-light
 cargo install --path .
 ```
