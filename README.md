@@ -1,4 +1,12 @@
+<div align="center">
+
 # MusicBrainz Light
+
+[![Crates.io](https://img.shields.io/crates/v/musicbrainz-light)](https://crates.io/crates/musicbrainz-light)
+[![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/your-org/musicbrainz-light)](https://github.com/your-org/musicbrainz-light/tags)
+[![CI](https://github.com/oknozor/mbpg-light/actions/workflows/CI.yaml/badge.svg)](https://github.com/oknozor/mbpg-light/actions/workflows/CI.yaml)
+
+</div>
 
 A high-performance Rust implementation for creating and maintaining MusicBrainz database mirrors with automatic schema updates.
 
@@ -6,13 +14,13 @@ This project is a modernized clone of [mbslave](https://github.com/acoustid/mbsl
 
 ## Features
 
-- 🚀 **Performance-Focused**: Written in Rust with async/await for improved performance
+- 🚀 **High Performance**: Written in Rust with async/await for optimal performance
 - 🔄 **Automatic Schema Updates**: Handles schema changes automatically without manual intervention
-- 📦 **Straightforward Setup**: Simple configuration and Docker support
+- 📦 **Easy Setup**: Simple configuration and Docker support
 - 🎯 **Selective Sync**: Configure which schemas and tables to replicate
 - 📊 **Progress Tracking**: Built-in progress bars for long-running operations
 - 🔧 **Flexible Configuration**: Support for TOML files and environment variables
-- 🐳 **Docker Ready**: Includes Docker Compose setup for deployment
+- 🐳 **Docker Ready**: Includes Docker Compose setup for easy deployment
 
 ## Improvements over mbslave
 
@@ -33,6 +41,12 @@ cargo install --path .
 ```
 
 The binary will be available at `target/release/mbpg-light`.
+
+### Using cargo
+
+```bash
+cargo install musicbrainz-light
+```
 
 ## Configuration
 
