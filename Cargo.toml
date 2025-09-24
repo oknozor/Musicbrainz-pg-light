@@ -1,21 +1,29 @@
 [package]
-name = "mbpg-light"
+name = "metadada-importer"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-postgres = "0.7.13"
-tokio-util = { version = "0.7.16", features = ["compat", "futures-util"] }
-bb8-postgres = "0.9.0"
 futures-util = "0.3"
-serde = { version = "1", features = ["derive"] }
-anyhow = "1"
-config = "0.15.15"
-reqwest = { version = "0.12.23", features = ["stream"] }
-tempfile = "3"
-bzip2 =  "0.4"
+tracing = "0.1.41"
+sqlx = { version = "0.8", features = [ "runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono"] }
+csv = "1.3.1"
+serde_json = "1.0.143"
+thiserror = "1"
+bzip2 = "0.4"
 tar = "0.4"
+tempfile = "3"
 bytes = "1"
-octocrab = "0.45.0"
-indicatif = { version = "0.18", features = ["tokio"] }
+itertools = "0.14"
+indicatif = { version = "0.18", features = ["tokio"], optional = true }
+octocrab = { version = "0.45.0", features = ["rustls"] }
+reqwest = { version = "0.12.23", default-features = false, features = ["stream" ,"rustls-tls"] }
+config = "0.15.15"
+serde = { version = "1", features = ["derive"] }
+chrono = "0.4"
+
+[features]
+default = ["progress"]
+notify = []
+progress = ["indicatif"]

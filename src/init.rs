@@ -1,4 +1,3 @@
-use anyhow::Result;
 use std::{fs, path::PathBuf};
 
 use crate::MbLight;

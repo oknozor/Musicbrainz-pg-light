@@ -1,4 +1,3 @@
-use anyhow::Result;
 use futures_util::future::join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use octocrab::Octocrab;
