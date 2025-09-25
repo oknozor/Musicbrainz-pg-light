@@ -2,6 +2,20 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [0.1.2](https://github.com/oknozor/musicbrainz-light/compare/7d6f638686327fe8c905070b562a767ceff34d3b..0.1.2) - 2025-09-25
+#### Bug Fixes
+- various typo - ([6b494ac](https://github.com/oknozor/musicbrainz-light/commit/6b494ac7e3f1a3e9c9f25b6adacab6213e6e3e15)) - [@oknozor](https://github.com/oknozor)
+- invalid table check in initialization - ([86d9c80](https://github.com/oknozor/musicbrainz-light/commit/86d9c8092bd59444192c3a174ac78748d749344e)) - [@oknozor](https://github.com/oknozor)
+- alter search path permanently and reconnect to DB - ([b08cbfb](https://github.com/oknozor/musicbrainz-light/commit/b08cbfbb42e2f4e124f9cea48684573a93b11db0)) - [@oknozor](https://github.com/oknozor)
+- replace broken feature with conditional runtime arg - ([0f85876](https://github.com/oknozor/musicbrainz-light/commit/0f85876d665aa9da13e822f17c5a478667e7ab43)) - [@oknozor](https://github.com/oknozor)
+- broken links again - ([78ba917](https://github.com/oknozor/musicbrainz-light/commit/78ba9176bae4d67982b51ba722e80d9bae1de2b4)) - [@oknozor](https://github.com/oknozor)
+- broken links in readme - ([e2f07f4](https://github.com/oknozor/musicbrainz-light/commit/e2f07f46100e0682d2b874fea2c2b601ceabbfd5)) - [@oknozor](https://github.com/oknozor)
+- add config examples and badges - ([7d6f638](https://github.com/oknozor/musicbrainz-light/commit/7d6f638686327fe8c905070b562a767ceff34d3b)) - [@oknozor](https://github.com/oknozor)
+#### Documentation
+- update readme with library doc - ([e2111c3](https://github.com/oknozor/musicbrainz-light/commit/e2111c323335d4541f9691bb01f59442baec7683)) - [@oknozor](https://github.com/oknozor)
+
+- - -
+
 ## [0.1.1](https://github.com/oknozor/musicbrainz-light/compare/5dbcaf0e2cda635afa3d864c0c31e5f5e5c6c1b1..0.1.1) - 2025-09-24
 #### Bug Fixes
 - add crates.io metadata - ([5dbcaf0](https://github.com/oknozor/musicbrainz-light/commit/5dbcaf0e2cda635afa3d864c0c31e5f5e5c6c1b1)) - [@oknozor](https://github.com/oknozor)
