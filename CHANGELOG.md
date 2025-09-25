@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## [0.1.3](https://github.com/oknozor/musicbrainz-light/compare/9307d9aaf25e83a652fc866b5fa5e38671c75cb1..0.1.3) - 2025-09-25
+#### Bug Fixes
+- fix optional olddata in replication packet and op sqlx type - ([9307d9a](https://github.com/oknozor/musicbrainz-light/commit/9307d9aaf25e83a652fc866b5fa5e38671c75cb1)) - [@oknozor](https://github.com/oknozor)
+
+- - -
+
 ## [0.1.2](https://github.com/oknozor/musicbrainz-light/compare/7d6f638686327fe8c905070b562a767ceff34d3b..0.1.2) - 2025-09-25
 #### Bug Fixes
 - various typo - ([6b494ac](https://github.com/oknozor/musicbrainz-light/commit/6b494ac7e3f1a3e9c9f25b6adacab6213e6e3e15)) - [@oknozor](https://github.com/oknozor)
