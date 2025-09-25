@@ -15,7 +15,7 @@ const EVENT_ART_ARCHIVE: &str = "mbdump-even-art-archive.tar.bz2";
 const MB_DUMP_STATS: &str = "mbdump-stats.tar.bz2";
 
 impl<S: MbLightSettingsExt> MbLight<S> {
-    pub async fn create_schemas(&self) -> MbLightResult<()> {
+    pub async fn create_schemas(&mut self) -> MbLightResult<()> {
         let schemas = [
             "musicbrainz",
             "cover_art_archive",
@@ -34,6 +34,8 @@ impl<S: MbLightSettingsExt> MbLight<S> {
             let query = format!("CREATE SCHEMA IF NOT EXISTS {}", schema);
             info!("Executing query: {}", query);
             sqlx::query(&query).execute(&self.db).await?;
+            self.alter_search_path().await?;
+            self.reconnect().await?;
         }
 
         Ok(())
@@ -104,6 +106,14 @@ impl<S: MbLightSettingsExt> MbLight<S> {
             let path = local_path.join(sql_script);
             self.run_sql_file(path.to_str().unwrap()).await?;
         }
+        Ok(())
+    }
+
+    async fn alter_search_path(&mut self) -> MbLightResult<()> {
+        sqlx::query("ALTER USER username SET search_path = musicbrainz, public;")
+            .execute(&self.db)
+            .await?;
+
         Ok(())
     }
 

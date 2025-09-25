@@ -70,8 +70,8 @@ impl<S: MbLightSettingsExt> MbLight<S> {
     }
 
     pub async fn drop_tablecheck(&self) -> MbLightResult<()> {
-        sqlx::query!(
-            "ALTER TABLE dbmirror2.pending_data DROP CONSTRAINT IF EXISTS tablename_exists;"
+        sqlx::query(
+            "ALTER TABLE dbmirror2.pending_data DROP CONSTRAINT IF EXISTS tablename_exists;",
         )
         .execute(&self.db)
         .await?;

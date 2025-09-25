@@ -82,14 +82,14 @@ impl<S: MbLightSettingsExt> MbLight<S> {
         }
         let fulltable = format!("{}.{}", schema, table);
 
-        let table_exists: bool = sqlx::query_scalar!(
+        let table_exists: bool = sqlx::query_scalar(
             "SELECT EXISTS (
                      SELECT FROM information_schema.tables
                      WHERE table_schema = $1 AND table_name = $2
                  )",
-            schema,
-            table
         )
+        .bind(schema)
+        .bind(table)
         .fetch_one(&self.db)
         .await
         .map(Option::unwrap_or_default)?;

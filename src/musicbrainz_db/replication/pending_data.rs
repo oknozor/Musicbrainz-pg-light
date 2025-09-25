@@ -14,7 +14,7 @@ pub struct PendingData {
     keys: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::Type)]
 enum Operation {
     Delete,
     Insert,
@@ -43,8 +43,7 @@ impl fmt::Display for Operation {
 
 impl PendingData {
     pub async fn all(db: &sqlx::PgPool) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
+        sqlx::query_as(
             r#"SELECT pd.xid,
                    pd.tablename as fulltable,
                    pd.op,
@@ -64,7 +63,8 @@ impl PendingData {
         mut tx: Transaction<'_, Postgres>,
         xid: i64,
     ) -> Result<Transaction<'_, Postgres>, sqlx::Error> {
-        sqlx::query!(r#"DELETE FROM dbmirror2.pending_data WHERE xid = $1"#, xid)
+        sqlx::query(r#"DELETE FROM dbmirror2.pending_data WHERE xid = $1"#)
+            .bind(xid)
             .execute(&mut *tx)
             .await?;
         Ok(tx)
@@ -193,11 +193,11 @@ fn sql_literal(val: &serde_json::Value) -> String {
 
 impl<S: MbLightSettingsExt> MbLight<S> {
     pub async fn truncate_pending_data(&self) -> Result<(), sqlx::Error> {
-        sqlx::query!(r#"TRUNCATE TABLE dbmirror2.pending_data"#,)
+        sqlx::query(r#"TRUNCATE TABLE dbmirror2.pending_data"#)
             .execute(&self.db)
             .await?;
 
-        sqlx::query!(r#"TRUNCATE TABLE dbmirror2.pending_keys"#,)
+        sqlx::query(r#"TRUNCATE TABLE dbmirror2.pending_keys"#)
             .execute(&self.db)
             .await?;
 
