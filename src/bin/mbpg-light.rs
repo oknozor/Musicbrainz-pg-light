@@ -1,7 +1,6 @@
 use clap::Parser;
 use color_eyre::{Result, config::HookBuilder};
 use musicbrainz_light::{MbLight, settings::Settings};
-use sqlx::postgres::PgPoolOptions;
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -44,12 +43,9 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     let config = Settings::get()?;
-    let db = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&config.db_url())
-        .await?;
+    let db_url = config.db_url();
 
-    let mut mblight = MbLight::try_new(config, db)?;
+    let mut mblight = MbLight::try_new(config, db_url).await?;
 
     match cli {
         Cli::Init => mblight.init().await?,

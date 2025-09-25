@@ -1,10 +1,12 @@
 use sqlx::{
     PgPool,
+    prelude::FromRow,
     types::chrono::{DateTime, Utc},
 };
 
 use crate::{MbLightError, error::MbLightResult};
 
+#[derive(Debug, FromRow)]
 pub struct ReplicationControl {
     pub current_schema_sequence: Option<i32>,
     pub current_replication_sequence: Option<i32>,
@@ -13,8 +15,7 @@ pub struct ReplicationControl {
 
 impl ReplicationControl {
     pub async fn get(db: &PgPool) -> Result<Self, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
+        sqlx::query_as(
             "SELECT current_schema_sequence, current_replication_sequence, last_replication_date FROM replication_control"
         )
         .fetch_one(db)
@@ -22,10 +23,10 @@ impl ReplicationControl {
     }
 
     pub async fn update(self, db: &PgPool) -> MbLightResult<()> {
-        sqlx::query!(
+        sqlx::query(
             "UPDATE replication_control SET current_replication_sequence = $1, last_replication_date = NOW()",
-            self.next_replication_sequence()?,
         )
+        .bind(self.next_replication_sequence()?)
         .execute(db)
         .await?;
         Ok(())

@@ -4,6 +4,7 @@ use crate::musicbrainz_db::replication::replication_control::ReplicationControl;
 use crate::{error::MbLightResult, settings::MbLightSettingsExt};
 use octocrab::Octocrab;
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use tokio::sync::mpsc::Sender;
 use tracing::{error, info};
 
@@ -23,18 +24,34 @@ pub struct MbLight<S: MbLightSettingsExt> {
     pub github_client: Octocrab,
     pub config: Arc<S>,
     pub db: PgPool,
+    pub db_url: String,
     pub reindex_sender: Option<Sender<()>>,
 }
 
 impl<S: MbLightSettingsExt> MbLight<S> {
-    pub fn try_new(config: S, db: PgPool) -> Result<Self, MbLightError> {
+    pub async fn try_new(config: S, db_url: String) -> Result<Self, MbLightError> {
+        let db = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&db_url)
+            .await?;
+
         Ok(Self {
             http_client: reqwest::Client::new(),
             config: Arc::new(config),
             db,
+            db_url,
             github_client: Octocrab::builder().build()?,
             reindex_sender: None,
         })
+    }
+
+    async fn reconnect(&mut self) -> MbLightResult<()> {
+        let db = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&self.db_url)
+            .await?;
+        self.db = db;
+        Ok(())
     }
 
     pub fn with_sender(mut self, sender: Sender<()>) -> Self {
