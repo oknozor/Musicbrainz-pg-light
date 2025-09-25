@@ -12,7 +12,7 @@ mod tar_helper;
 
 pub(crate) mod download;
 pub(crate) mod musicbrainz_db;
-pub(crate) mod progress;
+pub mod progress;
 
 pub mod settings;
 

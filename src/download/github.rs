@@ -1,9 +1,9 @@
 use crate::error::MbLightResult;
+use crate::progress::MultiProgress;
 use crate::progress::get_progress_bar;
 use crate::settings::MbLightSettingsExt;
 use crate::{MbLight, MbLightError};
 use futures_util::future::join_all;
-use indicatif::MultiProgress;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::env::temp_dir;
@@ -27,7 +27,6 @@ impl<S: MbLightSettingsExt> MbLight<S> {
         )
         .await?;
 
-        mp.clear()?;
         Ok(local_dir)
     }
 
@@ -49,7 +48,6 @@ impl<S: MbLightSettingsExt> MbLight<S> {
         )
         .await?;
 
-        mp.clear()?;
         Ok(path_clone)
     }
 

@@ -4,8 +4,8 @@ use crate::settings::MbLightSettingsExt;
 use std::io::Read;
 use std::path::Path;
 
+use crate::progress::ProgressBar;
 use bytes::Bytes;
-use indicatif::ProgressBar;
 use sqlx::postgres::PgPoolCopyExt;
 use std::fs;
 use tar::Entry;
