@@ -110,9 +110,12 @@ impl<S: MbLightSettingsExt> MbLight<S> {
     }
 
     async fn alter_search_path(&mut self) -> MbLightResult<()> {
-        sqlx::query("ALTER USER username SET search_path = musicbrainz, public;")
-            .execute(&self.db)
-            .await?;
+        let username = self.config.db_user();
+        sqlx::query(&format!(
+            "ALTER USER {username} SET search_path = musicbrainz, public;"
+        ))
+        .execute(&self.db)
+        .await?;
 
         Ok(())
     }
