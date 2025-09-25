@@ -103,14 +103,18 @@ This command will:
 To keep your database up-to-date with incremental changes:
 
 ```bash
+# Sync once and exit when caught up
 mbpg-light sync
+
+# Sync continuously, waiting for new replication packets
+mbpg-light sync --loop
 ```
 
 This command will:
 1. Download and apply replication packets
 2. Automatically handle schema updates
 3. Process pending data changes
-4. Continue until all updates are applied
+4. Continue until all updates are applied (or loop infinitely with `--loop`)
 
 ## Logging
 
@@ -161,7 +165,6 @@ sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"] }
 The library supports several optional features:
 
 - `progress` (default): Enables progress bars during operations
-- `notify`: Enables reindex notifications via `tokio::sync::mpsc::Sender`
 - `cli`: Command-line interface dependencies (not needed for library usage)
 
 ```toml
@@ -172,10 +175,6 @@ musicbrainz-light = { version = "0.1", default-features = false }
 # With progress bars
 [dependencies]
 musicbrainz-light = { version = "0.1", default-features = false, features = ["progress"] }
-
-# With notifications
-[dependencies]
-musicbrainz-light = { version = "0.1", default-features = false, features = ["notify"] }
 ```
 
 ### Basic Usage
@@ -201,8 +200,11 @@ async fn main() -> Result<(), MbLightError> {
     // Initialize database (first time setup)
     mb_light.init().await?;
 
-    // Or sync with existing database
-    mb_light.sync().await?;
+    // Or sync with existing database (sync once)
+    mb_light.sync(false).await?;
+
+    // Or sync infinitely
+    mb_light.sync(true).await?;
 
     Ok(())
 }
@@ -255,9 +257,9 @@ let custom_config = MyCustomSettings { /* ... */ };
 let mb_light = MbLight::try_new(custom_config, db_pool)?;
 ```
 
-### With Notifications (notify feature)
+### With Notifications
 
-When using the `notify` feature, you can receive notifications when replication reaches the latest packet:
+When building `MbLight` with a `mpsc::Sender` , you can receive notifications when replication reaches the latest packet:
 
 ```rust
 use tokio::sync::mpsc;
@@ -269,11 +271,12 @@ async fn with_notifications() -> Result<(), MbLightError> {
     // Create notification channel
     let (tx, mut rx) = mpsc::channel(10);
 
-    let mb_light = MbLight::try_new(config, db, tx)?;
+    // Create MbLight instance and add notification sender
+    let mb_light = MbLight::try_new(config, db)?.with_sender(tx);
 
     // Spawn sync task
     let sync_handle = tokio::spawn(async move {
-        mb_light.sync().await
+        mb_light.sync(true).await  // Use infinite sync
     });
 
     // Listen for reindex notifications
@@ -331,14 +334,13 @@ The project supports several feature flags:
 
 - `cli` (default): Command-line interface with colored output
 - `progress` (default): Progress bars for long operations
-- `notify`: Enable reindex notifications
 
 ```bash
 # Build without CLI features
 cargo build --no-default-features
 
 # Build with specific features
-cargo build --features "progress,notify"
+cargo build --features "progress"
 ```
 
 ## License

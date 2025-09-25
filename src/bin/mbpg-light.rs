@@ -7,8 +7,14 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug, Parser)]
 pub enum Cli {
+    /// Initialize the database
     Init,
-    Sync,
+    /// Sync the database with the latest MusicBrainz data
+    Sync {
+        /// Wait for the next replication packet infinitely
+        #[arg(long, short)]
+        r#loop: bool,
+    },
 }
 
 #[tokio::main]
@@ -42,11 +48,12 @@ async fn main() -> Result<()> {
         .max_connections(5)
         .connect(&config.db_url())
         .await?;
+
     let mut mblight = MbLight::try_new(config, db)?;
 
     match cli {
         Cli::Init => mblight.init().await?,
-        Cli::Sync => mblight.sync().await?,
+        Cli::Sync { r#loop } => mblight.sync(r#loop).await?,
     }
 
     Ok(())
