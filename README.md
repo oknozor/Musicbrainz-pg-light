@@ -181,21 +181,14 @@ musicbrainz-light = { version = "0.1", default-features = false, features = ["pr
 
 ```rust
 use musicbrainz_light::{MbLight, settings::Settings, MbLightError};
-use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() -> Result<(), MbLightError> {
     // Load configuration
     let config = Settings::get()?;
 
-    // Create database connection pool
-    let db = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&config.db_url())
-        .await?;
-
     // Create MbLight instance
-    let mut mb_light = MbLight::try_new(config, db)?;
+    let mut mb_light = MbLight::try_new(config, config.db_url()).await?;
 
     // Initialize database (first time setup)
     mb_light.init().await?;
@@ -254,7 +247,7 @@ impl MbLightSettingsExt for MyCustomSettings {
 
 // Use with MbLight
 let custom_config = MyCustomSettings { /* ... */ };
-let mb_light = MbLight::try_new(custom_config, db_pool)?;
+let mb_light = MbLight::try_new(custom_config, db_url).await?;
 ```
 
 ### With Notifications
@@ -266,13 +259,12 @@ use tokio::sync::mpsc;
 
 async fn with_notifications() -> Result<(), MbLightError> {
     let config = Settings::get()?;
-    let db = PgPoolOptions::new().connect(&config.db_url()).await?;
 
     // Create notification channel
     let (tx, mut rx) = mpsc::channel(10);
 
     // Create MbLight instance and add notification sender
-    let mb_light = MbLight::try_new(config, db)?.with_sender(tx);
+    let mb_light = MbLight::try_new(config, config.db_url()).await?.with_sender(tx);
 
     // Spawn sync task
     let sync_handle = tokio::spawn(async move {

@@ -27,7 +27,7 @@ impl<S: MbLightSettingsExt> MbLight<S> {
         ];
 
         for schema in schemas {
-            if self.config.should_skip_table(schema) {
+            if self.config.should_skip_schema(schema) {
                 continue;
             }
 
