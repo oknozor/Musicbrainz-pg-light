@@ -162,7 +162,7 @@ impl<S: MbLightSettingsExt> MbLight<S> {
                     }
                     Err(e) => {
                         error!("Failed to process pending data: {data:?}");
-                        pb.finish_and_clear();
+                        pb.finish_with_message("Failed");
                         return Err(e);
                     }
                     Ok(None) => {}

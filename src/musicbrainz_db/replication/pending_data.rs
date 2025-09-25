@@ -9,28 +9,19 @@ pub struct PendingData {
     fulltable: String,
     op: Operation,
     pub xid: i64,
-    olddata: Value,
+    olddata: Option<Value>,
     newdata: Option<Value>,
     keys: Vec<String>,
 }
 
-#[derive(Debug, sqlx::Type)]
-enum Operation {
-    Delete,
-    Insert,
-    Update,
+#[derive(sqlx::Type, Debug)]
+#[repr(i8)]
+pub enum Operation {
+    Delete = b'd' as i8,
+    Insert = b'i' as i8,
+    Update = b'u' as i8,
 }
 
-impl From<i8> for Operation {
-    fn from(value: i8) -> Self {
-        match value as u8 as char {
-            'd' => Operation::Delete,
-            'i' => Operation::Insert,
-            'u' => Operation::Update,
-            _ => unreachable!("Invalid operation"),
-        }
-    }
-}
 impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -116,6 +107,8 @@ impl PendingData {
     fn get_where_clause(&self) -> MbLightResult<String> {
         let old_obj = self
             .olddata
+            .as_ref()
+            .ok_or_else(|| MbLightError::MissingPendingData("olddata"))?
             .as_object()
             .ok_or_else(|| MbLightError::MalformedPendingData("olddata"))?;
 
@@ -138,8 +131,10 @@ impl PendingData {
 
         let old_obj = self
             .olddata
+            .as_ref()
+            .ok_or_else(|| MbLightError::MissingPendingData("olddata"))?
             .as_object()
-            .ok_or_else(|| MbLightError::MissingPendingData("olddata"))?;
+            .ok_or_else(|| MbLightError::MalformedPendingData("olddata"))?;
 
         let mut changes = Vec::new();
 
@@ -237,7 +232,7 @@ mod tests {
             fulltable: "musicbrainz.release_group_meta".to_string(),
             op: Operation::Update,
             xid: 2266759644,
-            olddata: olddata,
+            olddata: Some(olddata),
             newdata: Some(newdata),
             keys: vec!["id".to_string()],
         };
