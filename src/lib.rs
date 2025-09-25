@@ -1,12 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
+use crate::musicbrainz_db::replication::replication_control::ReplicationControl;
+use crate::{error::MbLightResult, settings::MbLightSettingsExt};
 use octocrab::Octocrab;
 use sqlx::PgPool;
-#[cfg(feature = "notify")]
 use tokio::sync::mpsc::Sender;
 use tracing::{error, info};
-
-use crate::{error::MbLightResult, settings::MbLightSettingsExt};
 
 mod error;
 mod tar_helper;
@@ -24,24 +23,23 @@ pub struct MbLight<S: MbLightSettingsExt> {
     pub github_client: Octocrab,
     pub config: Arc<S>,
     pub db: PgPool,
-    #[cfg(feature = "notify")]
-    pub reindex_sender: Sender<()>,
+    pub reindex_sender: Option<Sender<()>>,
 }
 
 impl<S: MbLightSettingsExt> MbLight<S> {
-    pub fn try_new(
-        config: S,
-        db: PgPool,
-        #[cfg(feature = "notify")] reindex_sender: Sender<()>,
-    ) -> Result<Self, MbLightError> {
+    pub fn try_new(config: S, db: PgPool) -> Result<Self, MbLightError> {
         Ok(Self {
             http_client: reqwest::Client::new(),
             config: Arc::new(config),
             db,
-            #[cfg(feature = "notify")]
-            reindex_sender,
             github_client: Octocrab::builder().build()?,
+            reindex_sender: None,
         })
+    }
+
+    pub fn with_sender(mut self, sender: Sender<()>) -> Self {
+        self.reindex_sender = Some(sender);
+        self
     }
 
     /// Initialize the database by downloading and processing MusicBrainz SQL dump.
@@ -54,26 +52,20 @@ impl<S: MbLightSettingsExt> MbLight<S> {
         Ok(())
     }
 
-    pub async fn sync(&self) -> Result<(), MbLightError> {
+    pub async fn sync(&self, infinite: bool) -> Result<(), MbLightError> {
         self.drop_tablecheck().await?;
         loop {
             match self.apply_pending_replication().await {
                 Ok(_) => {}
                 Err(MbLightError::NotFound) => {
-                    #[cfg(feature = "notify")]
-                    {
+                    if let Some(sender) = &self.reindex_sender {
                         info!("Reached last replication packet, sending reindex signal");
-                        self.reindex_sender.send(()).await?;
+                        sender.send(()).await?;
                     }
-                    #[cfg(not(feature = "cli"))]
-                    {
+                    if infinite {
                         info!("Waiting for 15 minutes for a fresh replication packet");
-                        time::sleep(Duration::from_secs(60 * 15)).await;
-                    }
-                    #[cfg(feature = "cli")]
-                    {
-                        use crate::musicbrainz_db::replication::replication_control::ReplicationControl;
-
+                        tokio::time::sleep(Duration::from_secs(60 * 15)).await;
+                    } else {
                         let control = ReplicationControl::get(&self.db).await?;
                         info!(
                             "Reached last replication packet, schema_sequence = {}, replication_sequence = {}, terminating",

@@ -44,4 +44,3 @@ path = "src/bin/mbpg-light.rs"
 default = ["cli", "progress"]
 cli = ["clap", "color-eyre", "tracing-subscriber", "tracing-indicatif"]
 progress = ["indicatif"]
-notify = []
